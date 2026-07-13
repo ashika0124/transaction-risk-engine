@@ -1,0 +1,101 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: transaction-risk-engine
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/riskengine?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: transaction:com.riskengine.dto.TransactionEvent,decision:com.riskengine.dto.DecisionEvent
+    consumer:
+      group-id: risk-engine-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.type.mapping: transaction:com.riskengine.dto.TransactionEvent
+        spring.json.trusted.packages: "*"
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      mistralAI:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+
+# Mistral AI Configuration
+mistral:
+  api:
+    key: ${MISTRAL_API_KEY:placeholder-key}
+    url: https://api.mistral.ai/v1/chat/completions
+    model: mistral-small-latest
+
+# Risk Engine Configuration
+risk:
+  engine:
+    velocity:
+      window-seconds: 120
+      user-threshold: 5
+      device-threshold: 10
+      merchant-threshold: 15
+    rule:
+      high-amount-threshold: 10000
+      unusual-time-enabled: true
+      unusual-time-start-hour: 0
+      unusual-time-end-hour: 6
+
+# Logging
+logging:
+  level:
+    com.riskengine: DEBUG
+    org.springframework.kafka: INFO
+    org.springframework.data.redis: INFO
+
+---
+# Docker Profile
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: jdbc:mysql://mysql:3306/riskengine?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+
+  data:
+    redis:
+      host: redis
+
+  kafka:
+    bootstrap-servers: kafka:9092
